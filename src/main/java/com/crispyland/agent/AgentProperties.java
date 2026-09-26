@@ -27,7 +27,36 @@ public record AgentProperties(
         FactMemory facts,
         LongTerm longTerm,
         Invariants invariants,
-        Personalization profiles) {
+        Personalization profiles,
+        Briefing briefing) {
+
+    /**
+     * Where the MCP server's briefing admin API lives, for the card on the chat page.
+     * <p>
+     * Its own setting rather than derived from the MCP connection URL, even though on both the laptop
+     * and the VPS they are the same host. The MCP URL is the model's route to a tool protocol; this is
+     * a page's route to a management endpoint. Tying them together would mean that switching the
+     * calendar server off in the MCP panel — a decision about tokens — also blanked the card, which is
+     * a decision about neither.
+     *
+     * @param url     the server's base URL, with no path
+     * @param timeout how long a page render will wait. Short, because this runs before every view: a
+     *                slow answer here is a slow chat reply, and the card is not worth that
+     * @param collectTimeout how long the "collect now" button will wait. Much longer than
+     *                       {@code timeout}, because that request does two Google reads and a model
+     *                       call on the server's request thread — a button that gives up before the
+     *                       work it asked for finishes would report a failure that did not happen
+     */
+    public record Briefing(String url, java.time.Duration timeout,
+                           java.time.Duration collectTimeout) {
+
+        public Briefing {
+            url = (url == null || url.isBlank()) ? "http://localhost:8081" : url.strip();
+            timeout = (timeout == null) ? java.time.Duration.ofSeconds(2) : timeout;
+            collectTimeout = (collectTimeout == null) ? java.time.Duration.ofSeconds(45)
+                    : collectTimeout;
+        }
+    }
 
     /**
      * Where the standing rules live.

@@ -1,0 +1,46 @@
+[Unit]
+Description=AIAC MCP Server (calendar, tasks, briefing)
+After=network.target
+# The agent's MCP client does not recover from a server that is down at connect time.
+# Starting this unit first is the only mitigation.
+
+[Service]
+Type=simple
+User=russell
+
+WorkingDirectory=/opt/aiac/mcp
+
+# Secrets live here — GROQ_API_KEY at minimum.
+# Create once: echo 'GROQ_API_KEY=gsk_...' | install -m 600 /dev/stdin /opt/aiac/.env
+EnvironmentFile=/opt/aiac/.env
+
+# Absolute paths. The YAML defaults are relative to the working directory, which is correct on a
+# laptop where the process starts inside mcp-server/. Under systemd WorkingDirectory is set
+# explicitly, so relative paths would work — but the briefing file stores history across restarts,
+# and "it's wherever systemd thought the working directory was" is not a location worth debugging.
+Environment="BRIEFING_FILE=/opt/aiac/mcp/data/briefings.json"
+Environment="GOOGLE_CREDENTIALS_FILE=/opt/aiac/credentials.json"
+Environment="GOOGLE_TOKEN_DIRECTORY=/opt/aiac/.google-tokens"
+
+# The zone that decides where a calendar day starts and ends. The Hetzner image is UTC;
+# without this, "today" would flip at midnight UTC rather than midnight local time.
+Environment="GOOGLE_TIME_ZONE=Asia/Shanghai"
+
+# Bind to loopback. The Hetzner firewall blocks 8081 from the internet, but the BriefingAdmin
+# controller's own comment names this as the access-control assumption: only the agent on the
+# same box should be able to reach the admin API.
+Environment="SERVER_ADDRESS=127.0.0.1"
+
+ExecStart=/usr/bin/java -jar /opt/aiac/mcp/mcp-server.jar
+
+# Restart after failures, but not too eagerly — a misconfigured credential causes a fast retry
+# loop that hammers Google's token endpoint.
+Restart=on-failure
+RestartSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aiac-mcp
+
+[Install]
+WantedBy=multi-user.target

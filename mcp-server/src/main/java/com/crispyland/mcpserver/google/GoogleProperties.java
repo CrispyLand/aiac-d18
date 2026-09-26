@@ -1,6 +1,7 @@
 package com.crispyland.mcpserver.google;
 
 import java.nio.file.Path;
+import java.time.ZoneId;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -57,6 +58,16 @@ public record GoogleProperties(
     /** The credential cache directory, absolute. */
     public Path tokenPath() {
         return Path.of(tokenDirectory).toAbsolutePath().normalize();
+    }
+
+    /**
+     * The zone {@link #timeZone} names, resolved. Here rather than at each use site because there
+     * are now two of them — the reader that fetches a day's events and the job that measures how
+     * much of that day was booked — and two copies of "blank means the JVM's" is one copy too many
+     * for a rule that decides which events belong to which date.
+     */
+    public ZoneId zone() {
+        return timeZone.isEmpty() ? ZoneId.systemDefault() : ZoneId.of(timeZone);
     }
 
     private static String blankTo(String value, String fallback) {

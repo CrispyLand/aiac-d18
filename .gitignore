@@ -3,6 +3,9 @@ target/
 
 ### Persisted conversation history — contains real user messages
 /data/
+
+### Collected briefings — real event titles and task names, same reasoning as /data/
+mcp-server/data/
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin

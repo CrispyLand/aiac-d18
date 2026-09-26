@@ -49,8 +49,63 @@ google:
   # has no time of day to place in a zone.
   time-zone: ""
 
+# The scheduled job: what it writes, when it runs, and what it is allowed to spend on prose.
+briefing:
+  # Relative, like the Google paths above, and for the same reason — correct when the process starts
+  # in mcp-server/. Under systemd it MUST be overridden (BRIEFING_FILE) to an absolute path, because
+  # a unit does not start in this directory and the job would otherwise write its history somewhere
+  # nobody reads it.
+  file: data/briefings.json
+
+  # The schedule to start with, used only when the file has no stored choice. `off` means a fresh
+  # install collects nothing until someone picks an option — the same direction an unrecognised value
+  # falls back to. Options: off, every-minute, every-5-minutes, every-15-minutes, hourly,
+  # every-6-hours, daily.
+  schedule: "off"
+
+  # When the `daily` option fires, in google.time-zone. A briefing is read at the start of a day, so
+  # the default is early rather than convenient for testing.
+  daily-at: "07:00"
+
+  # How many attempts the log keeps. At every-minute this would otherwise grow by 1440 entries a day
+  # for a card that shows a handful.
+  keep-runs: 20
+
+  narrator:
+    # Never hardcoded, exactly as the agent's agent.api-key. Blank is a supported state: the figures
+    # are still collected and stored, and the run is logged as not narrated.
+    api-key: ${GROQ_API_KEY:}
+    endpoint: https://api.groq.com/openai/v1/chat/completions
+
+    # Small on purpose. Turning seven numbers into one sentence is a mechanical rewrite, not a
+    # reasoning task, and this runs unattended — the model that costs the least to be wrong is the
+    # right one. Its own setting, so it cannot inherit whatever the chat was switched to.
+    model: openai/gpt-oss-20b
+
+    # A sentence or two, and a hard ceiling on what a pathological day can spend. On gpt-oss the
+    # hidden reasoning tokens are billed against this same number and spent first, so it covers both.
+    max-tokens: 300
+
+    # Not a tuning knob — this one is load-bearing. Left unset, gpt-oss spent the entire budget
+    # deliberating over a table of seven numbers and returned finish_reason: length with no content,
+    # which reaches the card as a healthy run that merely has no sentence. Measured on the same
+    # prompt: ~700 characters of hidden reasoning without it, ~110 with it. Set to "" for a model
+    # that rejects the parameter (qwen/compound).
+    reasoning-effort: low
+
+    # Low: the prose should describe the figures printed directly above it, not embroider them.
+    temperature: 0.3
+
+    # The whole call. Short, because the scheduler has one thread and a job waiting on a hung
+    # provider is a job that is not collecting.
+    timeout: 20s
+
 logging:
   level:
     # The handshake and tools/list exchange, so the terminal shows the client arriving.
     io.modelcontextprotocol: INFO
     org.springframework.ai.mcp: INFO
+
+    # The collector says what it stored and why it did or did not narrate. At DEBUG it also reports
+    # the runs where nothing had changed, which is how the "no model call when idle" claim is checked.
+    com.crispyland.mcpserver.briefing: INFO

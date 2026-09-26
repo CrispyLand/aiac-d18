@@ -1,9 +1,8 @@
 package com.crispyland.mcpserver;
 
+import com.crispyland.mcpserver.google.TaskReader;
 import com.google.api.services.tasks.Tasks;
 import com.google.api.services.tasks.model.Task;
-import com.google.api.services.tasks.model.TaskList;
-import com.google.api.services.tasks.model.TaskLists;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -24,22 +23,20 @@ import org.springframework.stereotype.Service;
  * returned a task. Merging them into one tool would mean one failing API silently truncating the
  * other's answer.
  * <p>
- * Nothing here knows about OAuth. The {@link Tasks} service arrives authorized from
- * {@code com.crispyland.mcpserver.google}, and the only thing this class can do with it is what
- * {@code tasks.readonly} permits.
+ * Nothing here knows about OAuth, and since the briefing job arrived, nothing here knows about the
+ * Tasks API either — {@link TaskReader} owns the query, including the {@code dueMax} rule that used
+ * to live in this file. The {@link Tasks} service arrives authorized one layer down, and the only
+ * thing it can do is what {@code tasks.readonly} permits.
  */
 @Service
 public class TaskTools {
 
     private static final Logger log = LoggerFactory.getLogger(TaskTools.class);
 
-    /** Enough for any sane to-do list, and a bound so a pathological one cannot return forever. */
-    private static final int MAX_TASKS = 50;
+    private final TaskReader reader;
 
-    private final Tasks tasks;
-
-    public TaskTools(Tasks tasks) {
-        this.tasks = tasks;
+    public TaskTools(TaskReader reader) {
+        this.reader = reader;
     }
 
     @McpTool(name = "getTasks",
@@ -53,7 +50,6 @@ public class TaskTools {
                     + "e.g. '2026-03-17'. Omit to list every outstanding task.",
                     required = false) String date) throws IOException {
 
-        String dueBefore = null;
         LocalDate day = null;
         if (date != null && !date.isBlank()) {
             try {
@@ -64,40 +60,14 @@ public class TaskTools {
                 return "'%s' is not a date I can read. Use ISO yyyy-MM-dd, for example 2026-03-17."
                         .formatted(date);
             }
-            // The Tasks API stores a due date with the time discarded and the instant pinned to
-            // midnight UTC — it is a date wearing a timestamp's clothes. So the bound is built
-            // from the plain date, NOT by converting a local day to UTC the way getSchedule
-            // correctly does for events. Doing that here would shift the cut-off by a day for
-            // anyone not on UTC.
-            //
-            // The day AFTER the one asked for, because dueMax gets the same treatment on read as
-            // due does on write: the time half is thrown away and what remains is compared
-            // strictly. An end-of-day bound of `day + T23:59:59.999Z` therefore collapses back to
-            // that day's midnight and excludes the tasks due on it — measured, not assumed: with
-            // two tasks due 2026-09-24, a dueMax of 2026-09-24T23:59:59.999Z returned none and
-            // 2026-09-25T23:59:59.999Z returned both. Half-open at midnight is also what the
-            // comparison actually is, so it says what it means.
-            dueBefore = day.plusDays(1) + "T00:00:00.000Z";
         }
 
-        String listId = defaultListId();
-        if (listId == null) {
+        if (!reader.hasTaskList()) {
             return "This Google account has no task lists.";
         }
 
-        Tasks.TasksOperations.List request = tasks.tasks().list(listId)
-                // Outstanding work only. showHidden stays false with it: a hidden task is one
-                // already completed in Google's own clients, so asking for both would contradict
-                // the question being answered.
-                .setShowCompleted(false)
-                .setShowHidden(false)
-                .setMaxResults(MAX_TASKS);
-        if (dueBefore != null) {
-            request.setDueMax(dueBefore);
-        }
-
-        List<Task> items = request.execute().getItems();
-        int found = (items == null) ? 0 : items.size();
+        List<Task> items = (day == null) ? reader.outstanding() : reader.dueOnOrBefore(day);
+        int found = items.size();
         log.info("getTasks({}) -> {} incomplete task(s)", (day == null) ? "all" : day, found);
 
         if (found == 0) {
@@ -123,26 +93,13 @@ public class TaskTools {
         return out.toString().stripTrailing();
     }
 
-    /**
-     * The id of the account's default task list.
-     * <p>
-     * {@code tasklists().list()} returns the default first. The undocumented {@code @default}
-     * alias would save this call and does work today, but it is absent from the REST reference
-     * and the discovery document, which makes it a dependency on behaviour nobody promised.
-     */
-    private String defaultListId() throws IOException {
-        TaskLists lists = tasks.tasklists().list().setMaxResults(1).execute();
-        List<TaskList> items = lists.getItems();
-        return (items == null || items.isEmpty()) ? null : items.get(0).getId();
-    }
-
     /** One line per task: what it is, when it is due, and where it stands. */
     private String describe(Task task) {
         String title = (task.getTitle() == null || task.getTitle().isBlank())
                 ? "(untitled)" : task.getTitle().strip();
 
         StringBuilder line = new StringBuilder(64).append(title);
-        String due = dueDate(task);
+        LocalDate due = TaskReader.dueDate(task);
         line.append(due == null ? " — no due date" : " — due " + due);
 
         // Always stated, even though this method only ever sees incomplete tasks. The status is
@@ -150,22 +107,6 @@ public class TaskTools {
         // filtered to know what they are looking at.
         line.append(" [").append(completed(task) ? "completed" : "not completed").append(']');
         return line.toString();
-    }
-
-    /**
-     * The due date as a plain date.
-     * <p>
-     * The field arrives as an RFC 3339 string whose time half is meaningless — Google discards it
-     * on write. Truncating at the {@code T} reports what was actually stored instead of implying
-     * a midnight deadline nobody set.
-     */
-    private String dueDate(Task task) {
-        String due = task.getDue();
-        if (due == null || due.isBlank()) {
-            return null;
-        }
-        int t = due.indexOf('T');
-        return (t < 0) ? due : due.substring(0, t);
     }
 
     private boolean completed(Task task) {

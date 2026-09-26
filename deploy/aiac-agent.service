@@ -1,0 +1,31 @@
+[Unit]
+Description=AIAC Agent (chat UI)
+After=network.target aiac-mcp.service
+# A soft dependency: the agent starts even if the MCP server failed, because a missing briefing
+# card is better than no chat page. The hard constraint is ordering — if both are starting at
+# boot, the MCP server must have its port open before the agent's MCP client dials it.
+Wants=aiac-mcp.service
+
+[Service]
+Type=simple
+User=russell
+
+WorkingDirectory=/opt/aiac/agent
+
+# Shares the same secrets file as the MCP server. Both read GROQ_API_KEY from it.
+EnvironmentFile=/opt/aiac/.env
+
+# Bind to loopback — nginx terminates the public connection on port 80 and proxies here.
+Environment="SERVER_ADDRESS=127.0.0.1"
+
+ExecStart=/usr/bin/java -jar /opt/aiac/agent/agent.jar
+
+Restart=on-failure
+RestartSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aiac-agent
+
+[Install]
+WantedBy=multi-user.target

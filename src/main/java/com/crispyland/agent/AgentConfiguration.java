@@ -1,5 +1,6 @@
 package com.crispyland.agent;
 
+import com.crispyland.briefing.BriefingClient;
 import com.crispyland.agent.judge.Judge;
 import com.crispyland.agent.judge.NoOpJudge;
 import com.crispyland.agent.llm.GroqLlmClient;
@@ -53,6 +54,25 @@ public class AgentConfiguration {
         RestClient restClient = RestClient.builder().requestFactory(requestFactory).build();
         ObjectMapper mapper = JsonMapper.builder().build();
         return new GroqLlmClient(restClient, mapper, properties.endpoint(), properties.apiKey());
+    }
+
+    /**
+     * The briefing card's client. Two {@link RestClient}s, both built here for the same reason the
+     * LLM client's is: a timeout is the only thing that stops a page render waiting on another
+     * process, and it belongs next to the decision about which process that is.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public BriefingClient briefingClient(AgentProperties properties) {
+        AgentProperties.Briefing briefing = properties.briefing();
+        return new BriefingClient(restClient(briefing.timeout()),
+                restClient(briefing.collectTimeout()), JsonMapper.builder().build(), briefing.url());
+    }
+
+    private static RestClient restClient(java.time.Duration readTimeout) {
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
+        requestFactory.setReadTimeout(readTimeout);
+        return RestClient.builder().requestFactory(requestFactory).build();
     }
 
     @Bean

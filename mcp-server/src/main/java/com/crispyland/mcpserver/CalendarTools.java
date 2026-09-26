@@ -1,11 +1,9 @@
 package com.crispyland.mcpserver;
 
-import com.crispyland.mcpserver.google.GoogleProperties;
-import com.google.api.client.util.DateTime;
+import com.crispyland.mcpserver.google.CalendarReader;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.EventDateTime;
-import com.google.api.services.calendar.model.Events;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -27,10 +25,11 @@ import org.springframework.stereotype.Service;
  * information nobody put in its training data or in this repository. A stub weather reading is
  * indistinguishable from a hallucinated one. A real appointment is not.
  * <p>
- * Nothing here knows about OAuth. The {@link Calendar} arrives authorized from
- * {@code com.crispyland.mcpserver.google}, and the only thing this class can do with it is what a
- * read-only scope permits — the separation is not stylistic, it is what makes "this tool cannot
- * change my calendar" checkable by reading one short file rather than trusting a comment.
+ * Nothing here knows about OAuth, and since the briefing job arrived, nothing here knows about the
+ * Calendar API either: {@link CalendarReader} owns the query and this class owns the wording. The
+ * read-only guarantee still holds by construction — it comes from the scope the {@link Calendar}
+ * was authorized with, one layer further down, which is what makes "this tool cannot change my
+ * calendar" checkable by reading a short file rather than trusting a comment.
  * <p>
  * The result is prose, not a data structure. The consumer is a language model reading a string,
  * so a JSON array of event objects would be re-read as text anyway, at a worse token price and
@@ -41,25 +40,14 @@ public class CalendarTools {
 
     private static final Logger log = LoggerFactory.getLogger(CalendarTools.class);
 
-    /**
-     * The calendar being read. {@code primary} is Google's alias for the signed-in user's own
-     * calendar, which is the one consent was given for.
-     */
-    private static final String CALENDAR_ID = "primary";
-
-    /** Enough for any single day, and a bound so a pathological day cannot return unlimited rows. */
-    private static final int MAX_EVENTS = 50;
-
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
-    private final Calendar calendar;
+    private final CalendarReader reader;
     private final ZoneId zone;
 
-    public CalendarTools(Calendar calendar, GoogleProperties properties) {
-        this.calendar = calendar;
-        this.zone = properties.timeZone().isEmpty()
-                ? ZoneId.systemDefault()
-                : ZoneId.of(properties.timeZone());
+    public CalendarTools(CalendarReader reader) {
+        this.reader = reader;
+        this.zone = reader.zone();
     }
 
     @McpTool(name = "getSchedule",
@@ -80,27 +68,10 @@ public class CalendarTools {
                     .formatted(date);
         }
 
-        // The full local day. Asking Google for a UTC day would quietly drop an evening event for
-        // anyone east of Greenwich and invent one for anyone west, which is the kind of bug that
-        // only shows up in someone else's timezone.
-        ZonedDateTime from = day.atStartOfDay(zone);
-        ZonedDateTime to = day.plusDays(1).atStartOfDay(zone);
+        List<Event> events = reader.eventsOn(day);
+        log.info("getSchedule({}) -> {} event(s) in {}", day, events.size(), zone);
 
-        Events result = calendar.events().list(CALENDAR_ID)
-                .setTimeMin(new DateTime(from.toInstant().toEpochMilli()))
-                .setTimeMax(new DateTime(to.toInstant().toEpochMilli()))
-                // Expands a recurring series into the occurrences that actually fall on this day.
-                // Without it the API returns the recurrence rule instead, which answers a
-                // different question than the one asked.
-                .setSingleEvents(true)
-                .setOrderBy("startTime")
-                .setMaxResults(MAX_EVENTS)
-                .execute();
-
-        List<Event> events = result.getItems();
-        log.info("getSchedule({}) -> {} event(s) in {}", day, (events == null) ? 0 : events.size(), zone);
-
-        if (events == null || events.isEmpty()) {
+        if (events.isEmpty()) {
             return "Nothing scheduled on " + day + ".";
         }
 

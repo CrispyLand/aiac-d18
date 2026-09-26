@@ -1166,7 +1166,7 @@ class AgentTest {
         assertThat(client.last.messages().get(1).role()).isEqualTo("system");
         assertThat(client.last.messages().get(1).content())
                 .contains("Russell")
-                .contains("Answer in: Russian")
+                .contains("Answer in: English")
                 .contains("short bullet points, at most 120 words")
                 .contains("use emoji");
     }
@@ -1410,7 +1410,10 @@ class AgentTest {
                 new AgentProperties.FactMemory("extractor", 12, 600, "low"),
                 new AgentProperties.LongTerm("", 24),
                 new AgentProperties.Invariants("", "guard", 400, "low"),
-                new AgentProperties.Personalization(""));
+                new AgentProperties.Personalization(""),
+                // Nothing in a turn touches the briefing card, which is the point of it being a
+                // separate panel — defaults are enough here.
+                new AgentProperties.Briefing(null, null, null));
     }
 
     /**

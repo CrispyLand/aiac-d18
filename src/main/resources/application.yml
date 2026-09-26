@@ -56,6 +56,10 @@ spring:
 server:
   port: 8080
 
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN}
+  chat-id: ${TELEGRAM_CHAT_ID}
+
 # ---------------------------------------------------------------------------
 # Everything the agent does is tunable from here. The page may override any of
 # the `defaults` per request; whatever it leaves empty falls back to these.
@@ -174,6 +178,25 @@ agent:
     # exactly the moment somebody wants to change how the agent talks to them. Read fresh every
     # turn, so an edit takes effect on the next message rather than the next restart.
     directory: ./profiles
+
+  # The briefing card: the MCP server's scheduled job, shown and controlled from this page.
+  #
+  # Its own URL rather than reusing the MCP connection below, even though they are the same host on
+  # both the laptop and the VPS. That one is the model's route to a tool protocol; this is a page's
+  # route to a management endpoint — and switching the calendar server off in the MCP panel, which is
+  # a decision about tokens, should not also blank the card.
+  briefing:
+    url: http://localhost:8081
+
+    # Short, because this is read before EVERY rendered view, including the POST that answers a chat
+    # turn. A slow answer here is a slow chat reply. The client cannot throw, so the cost of the
+    # timeout expiring is a card that says "unreachable" next to a reply that arrived normally.
+    timeout: 2s
+
+    # The "collect now" button, which is a different kind of request: the server does two Google reads
+    # and a model call on its own request thread. Giving up early would report a failure that did not
+    # happen, and leave the page disagreeing with the file.
+    collect-timeout: 45s
 
   # The second window. max-messages above bounds the dialogue in messages; the model bills
   # and rejects in tokens, so the prompt is priced locally before every call.

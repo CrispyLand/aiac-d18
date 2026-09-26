@@ -249,6 +249,34 @@
         .mcparg code { color: var(--ink); font-weight: 600; }
         .mcparg .req { color: #c92a2a; font-weight: 700; }
         .mcparg .opt { opacity: .7; }
+
+        /* The briefing card. Teal like MCP and deliberately so — it is the same process, and a
+           second colour would suggest a second thing to keep track of. What is different is the
+           ordering inside it: the sentence is set as prose at reading size and the figures are a
+           thin line above it, because this panel's claim is that something was *written* while
+           nobody was watching, not that something was counted. */
+        .card.briefing { border-left: 3px solid #0ca678; }
+        .brhead { display: flex; align-items: center; justify-content: space-between;
+                  gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 12px;
+                  flex-wrap: wrap; }
+        .brhead b { color: #0b7285; font-size: 14px; }
+        .brhead .picks { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+        .brfig { font-size: 11px; color: var(--muted); text-transform: uppercase;
+                 letter-spacing: .04em; }
+        .brsay { font-size: 15px; line-height: 1.55; margin: 6px 0 0; }
+        .brhigh { font-size: 12px; color: var(--muted); margin-top: 8px; padding-left: 14px; }
+        /* The run log. Small on purpose: it is the receipt for the sentence above, and an
+           every-minute schedule would otherwise make the receipt the loudest thing on the page. */
+        .brrun { display: flex; align-items: baseline; gap: 8px; font-size: 11px;
+                 color: var(--muted); border-top: 1px solid var(--line); padding: 5px 0; }
+        .brrun:last-child { padding-bottom: 0; }
+        /* An unchanged run is the expected case once the day has settled, and it cost nothing —
+           so it recedes rather than competing with the run that actually wrote something. */
+        .brrun.same { opacity: .5; }
+        .brrun.bad { color: #c92a2a; }
+        .brrun .when { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .brrun .what { flex: 1; }
+        .brlog { margin-top: 12px; }
         .stage.on { background: #e7f5ff; border-color: #4dabf7; color: #1971c2; }
         .stage.was { opacity: .55; }
         .stage.held { background: #fff4e6; border-color: #ffc078; color: #e8590c; }
@@ -529,6 +557,97 @@
                     <span th:unless="${p.required}" class="opt">optional</span>
                     — <span th:text="${p.description}">City name</span>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- The briefing. Directly under the MCP panel because it is that server's job: the schedule,
+         the collector and the file all live in the process listed above, and this card is the only
+         place either of them is visible without reading a log.
+         What the panel is claiming is narrower and harder than the one above it. MCP showed that a
+         tool can be reached when the model asks. This shows that something ran when *nobody* asked
+         — so the sentence comes first, as prose, and the figures sit above it as its receipt. A
+         card that led with the numbers would be a dashboard; the requirement is a summary. -->
+    <div class="card briefing">
+        <div class="brhead">
+            <span>
+                <!-- Red resting, like the MCP lamp: a card that cannot reach the server must not
+                     be able to look like an idle scheduler. -->
+                <span class="lamp" th:classappend="${briefing.reachable and !briefing.off()} ? 'on' : ''"></span>
+                <b>BRIEFING</b> ·
+                <span th:if="${!briefing.reachable}">server unreachable</span>
+                <span th:if="${briefing.reachable and briefing.off()}">not scheduled — nothing will run on its own</span>
+                <span th:if="${briefing.reachable and !briefing.off()}">
+                    <span th:text="${briefing.scheduleLabel}">daily at 07:00</span>
+                    <span th:if="${!#strings.isEmpty(briefing.nextRunAt)}">· next
+                        <span th:text="${briefing.nextRunAt}">2026-09-27 07:00</span></span>
+                    <span th:if="${!#strings.isEmpty(briefing.zone)}" th:text="${briefing.zone}">Asia/Shanghai</span>
+                </span>
+            </span>
+
+            <span class="picks">
+                <!-- Submits on change rather than behind an Apply button: there is one field, and
+                     a schedule that is displayed but not yet in force is the state this card exists
+                     to rule out. Empty options on an unreachable server, so it offers nothing it
+                     cannot actually do. -->
+                <select class="lenspick" name="schedule" form="briefingScheduleForm"
+                        th:disabled="${!briefing.reachable}" onchange="this.form.submit()"
+                        title="How often the server collects on its own. Changed at runtime — the job is rescheduled, not restarted.">
+                    <option th:each="o : ${briefing.options}" th:value="${o.id}"
+                            th:text="${o.label}" th:selected="${o.id == briefing.schedule}">daily at 07:00</option>
+                </select>
+                <!-- Slow by design: the server does two Google reads and a model call before it
+                     answers, which is what makes the card that follows the real result. -->
+                <button type="submit" form="briefingCollectForm" class="keep"
+                        th:disabled="${!briefing.reachable}"
+                        title="Collect today now, on this request. Takes several seconds — two Google reads and one model call.">Collect now</button>
+            </span>
+        </div>
+
+        <div class="note over" th:if="${!briefing.reachable}">
+            No answer from the briefing server. <span th:text="${briefing.error}">Connection refused</span>
+        </div>
+
+        <div class="empty" th:if="${briefing.reachable and !briefing.hasBriefing()}">
+            Nothing collected yet. Pick a schedule, or press <b>Collect now</b> to file today.
+        </div>
+
+        <div th:if="${briefing.hasBriefing()}">
+            <div class="brfig">
+                <span th:text="${briefing.latest.date}">2026-09-26</span> ·
+                <span th:text="${briefing.latest.figures}">3 events, 2h 30m booked, 4 tasks due</span> ·
+                collected <span th:text="${briefing.latest.collectedAt}">07:00</span>
+            </div>
+
+            <p class="brsay" th:if="${briefing.latest.narrated}" th:text="${briefing.latest.narrative}">
+                Three meetings today, the longest mid-afternoon, and four tasks are due.</p>
+
+            <!-- The one state that must not look like a healthy run. Said in words rather than left
+                 as a gap, because a gap reads as a quiet day — and the figures above are real. -->
+            <div class="note warn" th:if="${briefing.missingNarrative()}">
+                Figures collected, no sentence written — the narration step failed or had no API key.
+                Nothing here is stale; there is simply no prose for this day yet.
+            </div>
+
+            <div class="brhigh" th:each="h : ${briefing.latest.highlights}" th:text="${h}">
+                09:30 Standup</div>
+        </div>
+
+        <!-- A card showing yesterday's numbers without admitting that this morning's run broke is
+             worse than one with a gap in it, so the failure is stated beside the snapshot it is
+             not part of. -->
+        <div class="note over" th:if="${briefing.lastRunFailed()}">
+            The last attempt failed: <span th:text="${briefing.lastRun.detail}">404 Not Found</span>.
+            Anything above it is from an earlier run.
+        </div>
+
+        <div class="brlog" th:if="${!#lists.isEmpty(briefing.runs)}">
+            <div class="brrun" th:each="r : ${briefing.runs}"
+                 th:classappend="${!r.ok ? 'bad' : (r.unchanged() ? 'same' : '')}">
+                <span class="when" th:text="${r.at}">07:00</span>
+                <span class="what" th:text="${r.detail}">3 events, 2h 30m booked</span>
+                <span th:if="${r.ok and !r.narrated and !r.unchanged()}">not narrated</span>
+                <span th:text="${r.durationMillis} + 'ms'">1840ms</span>
             </div>
         </div>
     </div>
@@ -922,6 +1041,10 @@
          is why one form each is enough for all of them. -->
     <form id="mcpToggleForm" method="post" action="/mcp/toggle"></form>
     <form id="mcpServerToggleForm" method="post" action="/mcp/server/toggle"></form>
+    <!-- Two forms, not one: the dropdown posts on change and the button posts on click, and a
+         single form would make each of them carry the other's field. -->
+    <form id="briefingScheduleForm" method="post" action="/briefing/schedule"></form>
+    <form id="briefingCollectForm" method="post" action="/briefing/collect"></form>
     <form id="resetForm" method="post" action="/reset"></form>
     <form id="profileForm" method="post" action="/profile/switch"></form>
     <form id="switchForm" method="post" action="/branch/switch"></form>
