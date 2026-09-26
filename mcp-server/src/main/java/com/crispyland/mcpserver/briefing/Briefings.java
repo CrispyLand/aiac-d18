@@ -28,11 +28,10 @@ import java.util.List;
 public final class Briefings {
 
     /**
-     * How many lines the day is allowed to name. This is a prompt bound as much as a display one:
-     * the highlights are pasted into the narrator's request, so an unbounded list would let a
-     * pathological day quietly buy itself a much larger model call.
+     * How many lines the narrator is shown. The full list is stored and displayed; only the prompt
+     * is capped, so an unusually busy day cannot quietly buy itself a much larger model call.
      */
-    static final int MAX_HIGHLIGHTS = 8;
+    static final int MAX_NARRATOR_HIGHLIGHTS = 8;
 
     /** Long enough for a real meeting title, short enough that one cannot dominate the prompt. */
     private static final int MAX_TITLE = 60;
@@ -94,15 +93,9 @@ public final class Briefings {
         }
 
         // Events first, because they are what the day looks like; overdue tasks after, because they
-        // are what is wrong with it. Both truncated together so the cap is on the whole block.
+        // are what is wrong with it. The full list is stored — the narrator caps its own view.
         List<String> highlights = new ArrayList<>(eventLines);
         highlights.addAll(overdueLines);
-        if (highlights.size() > MAX_HIGHLIGHTS) {
-            int dropped = highlights.size() - (MAX_HIGHLIGHTS - 1);
-            highlights = new ArrayList<>(highlights.subList(0, MAX_HIGHLIGHTS - 1));
-            // Says that it truncated. A silently short list reads as a quieter day than it was.
-            highlights.add("… and " + dropped + " more");
-        }
 
         return new Briefing(date, collectedAt, events.size(), allDay, (int) minutes,
                 tasks.size(), overdue, highlights, "");

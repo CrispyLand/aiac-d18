@@ -31,6 +31,11 @@ Environment="GOOGLE_TIME_ZONE=Asia/Shanghai"
 # same box should be able to reach the admin API.
 Environment="SERVER_ADDRESS=127.0.0.1"
 
+# Telegram delivery. Both must be set for notifications to fire; either missing is a no-op.
+# Add to /opt/aiac/.env:
+#   TELEGRAM_BOT_TOKEN=...
+#   TELEGRAM_CHAT_ID=...
+
 ExecStart=/usr/bin/java -jar /opt/aiac/mcp/mcp-server.jar
 
 # Restart after failures, but not too eagerly — a misconfigured credential causes a fast retry

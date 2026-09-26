@@ -10,11 +10,12 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * The three collaborators that need a decision made about them before they can be constructed: a
- * clock in the right zone, a store pointed at a file, and a narrator that may have no key.
+ * The collaborators that need a decision made about them before they can be constructed: a clock in
+ * the right zone, a store pointed at a file, a narrator that may have no key, and a notifier that
+ * may have no Telegram config.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(BriefingProperties.class)
+@EnableConfigurationProperties({BriefingProperties.class, TelegramProperties.class})
 public class BriefingConfiguration {
 
     /**
@@ -47,5 +48,21 @@ public class BriefingConfiguration {
         requestFactory.setReadTimeout(properties.narrator().timeout());
         RestClient restClient = RestClient.builder().requestFactory(requestFactory).build();
         return new GroqBriefingNarrator(restClient, mapper, properties.narrator());
+    }
+
+    /**
+     * No-op when Telegram is not configured — the job still runs, it just does not deliver.
+     * A 10-second read timeout: Telegram's API is fast, and the scheduler's single thread cannot
+     * afford to wait indefinitely on a delivery that will never arrive.
+     */
+    @Bean
+    public TelegramNotifier telegramNotifier(ObjectMapper mapper, TelegramProperties properties) {
+        if (!properties.configured()) {
+            return TelegramNotifier.NONE;
+        }
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
+        requestFactory.setReadTimeout(java.time.Duration.ofSeconds(10));
+        RestClient restClient = RestClient.builder().requestFactory(requestFactory).build();
+        return new TelegramNotifier(restClient, mapper, properties);
     }
 }

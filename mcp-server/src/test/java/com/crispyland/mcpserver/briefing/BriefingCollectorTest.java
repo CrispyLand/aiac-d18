@@ -76,7 +76,7 @@ class BriefingCollectorTest {
             }
         };
         return new BriefingCollector(calendar, taskReader, store, narrator,
-                Clock.fixed(NOON, ZoneOffset.UTC));
+                TelegramNotifier.NONE, Clock.fixed(NOON, ZoneOffset.UTC));
     }
 
     private BriefingNarrator counting(String sentence) {
@@ -287,9 +287,9 @@ class BriefingCollectorTest {
             }
         };
         new BriefingCollector(calendar, taskReader, store, counting("first"),
-                Clock.fixed(NOON, ZoneOffset.UTC)).collect(DAY);
+                TelegramNotifier.NONE, Clock.fixed(NOON, ZoneOffset.UTC)).collect(DAY);
         new BriefingCollector(calendar, taskReader, store, counting("second"),
-                Clock.fixed(NOON.plusSeconds(600), ZoneOffset.UTC)).collect(DAY);
+                TelegramNotifier.NONE, Clock.fixed(NOON.plusSeconds(600), ZoneOffset.UTC)).collect(DAY);
 
         assertThat(narrations).hasValue(1);
         assertThat(store.briefing(DAY).collectedAt()).isEqualTo(NOON.plusSeconds(600));

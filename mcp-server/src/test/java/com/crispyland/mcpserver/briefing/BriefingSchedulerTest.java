@@ -76,7 +76,7 @@ class BriefingSchedulerTest {
         };
         Clock clock = Clock.fixed(NOON, SHANGHAI);
         BriefingCollector collector = new BriefingCollector(calendar, tasks, store,
-                BriefingNarrator.NONE, clock);
+                BriefingNarrator.NONE, TelegramNotifier.NONE, clock);
         return new BriefingScheduler(scheduler, collector, store, clock,
                 new BriefingProperties(null, null, LocalTime.of(7, 0), 20, null));
     }

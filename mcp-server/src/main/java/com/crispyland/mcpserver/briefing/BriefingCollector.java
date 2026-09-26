@@ -36,15 +36,17 @@ public class BriefingCollector {
     private final TaskReader tasks;
     private final BriefingStore store;
     private final BriefingNarrator narrator;
+    private final TelegramNotifier telegram;
     private final Clock clock;
     private final ZoneId zone;
 
     public BriefingCollector(CalendarReader calendar, TaskReader tasks, BriefingStore store,
-                             BriefingNarrator narrator, Clock clock) {
+                             BriefingNarrator narrator, TelegramNotifier telegram, Clock clock) {
         this.calendar = calendar;
         this.tasks = tasks;
         this.store = store;
         this.narrator = narrator;
+        this.telegram = telegram;
         this.clock = clock;
         // From the reader, not from the clock: the zone that decides which events belong to this day
         // has to be the same one the query drew its bounds in, or the edges of the day disagree.
@@ -135,11 +137,14 @@ public class BriefingCollector {
         // On a changed day a failed narration stores no sentence rather than the previous one. The
         // old sentence described figures that no longer hold, so keeping it would be the one failure
         // mode with no visible symptom.
+        Briefing narrated = fresh.withNarrative(sentence);
         BriefingRun run = BriefingRun.succeeded(at, !sentence.isEmpty(), fresh.figures(),
                 millisSince(started));
-        store.save(fresh.withNarrative(sentence), run);
+        store.save(narrated, run);
         log.info("Briefing for {}: {}{}", date, fresh.figures(),
                 sentence.isEmpty() ? " (not narrated)" : "");
+        // Delivered after the store write, so a Telegram failure cannot cost a collection.
+        telegram.send(narrated);
         return run;
     }
 

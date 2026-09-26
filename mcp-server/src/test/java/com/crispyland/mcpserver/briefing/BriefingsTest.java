@@ -134,12 +134,11 @@ class BriefingsTest {
     }
 
     /**
-     * The highlights are pasted into the narrator's prompt, so the cap is a cost control as well as
-     * a display one — and it has to say that it truncated, because a list that stops early reads as
-     * a quieter day than it was.
+     * The full list is stored regardless of length — the narrator caps its own view, but storage
+     * and display are unbounded. A busy day should not silently look quieter than it is.
      */
     @Test
-    void aVeryFullDayIsTruncatedAndSaysSo() {
+    void aVeryFullDayStoresAllHighlights() {
         List<Event> many = new java.util.ArrayList<>();
         for (int hour = 8; hour < 20; hour++) {
             many.add(event("meeting " + hour, "%02d:00".formatted(hour), "%02d:30".formatted(hour)));
@@ -148,8 +147,8 @@ class BriefingsTest {
         Briefing briefing = summarise(many, List.of());
 
         assertThat(briefing.events()).isEqualTo(12);
-        assertThat(briefing.highlights()).hasSize(Briefings.MAX_HIGHLIGHTS);
-        assertThat(briefing.highlights().get(Briefings.MAX_HIGHLIGHTS - 1)).isEqualTo("… and 5 more");
+        assertThat(briefing.highlights()).hasSize(12);
+        assertThat(briefing.highlights()).noneMatch(h -> h.contains("… and"));
     }
 
     @Test

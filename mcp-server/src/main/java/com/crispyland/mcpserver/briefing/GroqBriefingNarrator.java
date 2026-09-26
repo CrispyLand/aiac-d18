@@ -1,6 +1,7 @@
 package com.crispyland.mcpserver.briefing;
 
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -135,17 +136,19 @@ public class GroqBriefingNarrator implements BriefingNarrator {
     }
 
     /**
-     * The figures, then the lines. The highlights are already capped by
-     * {@code Briefings.MAX_HIGHLIGHTS}, which is what keeps this prompt a fixed size no matter how
-     * busy the day was — a cost control, not a display one.
+     * The figures, then the lines. The highlights are capped here — the full list is stored and
+     * displayed, but the prompt is a fixed size regardless of how busy the day was.
      */
     private String prompt(Briefing briefing) {
         StringBuilder out = new StringBuilder(256)
                 .append(briefing.date().format(DAY)).append('\n')
                 .append(briefing.figures());
-        if (!briefing.highlights().isEmpty()) {
+        List<String> highlights = briefing.highlights();
+        if (!highlights.isEmpty()) {
             out.append("\n\nThe day:");
-            briefing.highlights().forEach(line -> out.append("\n- ").append(line));
+            highlights.stream()
+                    .limit(Briefings.MAX_NARRATOR_HIGHLIGHTS)
+                    .forEach(line -> out.append("\n- ").append(line));
         }
         return out.toString();
     }
